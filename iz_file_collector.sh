@@ -5,27 +5,27 @@ SOURCE_DIR="." # 默认为当前目录
 DEFAULT_OUTPUT_DIR="collected_files_$(date +%Y%m%d_%H%M%S)" # 默认输出目录
 TARGET_DIR=""    # 如果用户未指定，则使用上面的默认值
 TARGET_FILE=""   # 必须由用户指定
-EXTENSION=""     # 默认为空
+EXTENSION=""     # 可选，用于在文件名后追加扩展名
 
 # --- 帮助信息函数 ---
 show_help() {
-    echo "用法: $0 -f <文件名> [选项...]"
+    echo "用法: $0 -f <文件名或模式> [选项...]"
     echo ""
     echo "一个通用的文件查找和复制脚本，可根据文件所在目录结构重命名。"
     echo ""
     echo "选项:"
-    echo "  -f <文件名>    (必需) 指定要搜索的文件名，例如 'SConscript'。"
+    echo "  -f <文件名>    (必需) 指定要搜索的文件名或模式，例如 'main.c' 或 '*.c'。"
     echo "  -s <源目录>    (可选) 指定从哪个目录开始搜索。默认为当前目录。"
     echo "  -o <目标目录>  (可选) 指定输出结果的目标目录。默认为 './collected_files_YYYYMMDD_HHMMSS'。"
-    echo "  -e <扩展名>    (可选) 为复制后的文件添加指定的扩展名，例如 'txt' 或 '.txt'。默认不添加扩展名。"
+    echo "  -e <扩展名>    (可选) 为复制后的文件添加一个额外的扩展名。如果未提供，则只保留原始扩展名。"
     echo "  --help         显示此帮助信息并退出。"
     echo ""
     echo "示例:"
-    echo "  # 在当前目录查找所有 'SConscript' 并复制到 './output' 文件夹，新文件添加 '.txt' 扩展名"
-    echo "  $0 -f SConscript -o ./output -e .txt"
+    echo "  # 查找所有 'main.c'，生成 '.../main-k230-apps.c'"
+    echo "  $0 -f main.c -o ./output"
     echo ""
-    echo "  # 从 '../projects' 目录查找 'Makefile' 并复制到默认目录，不加扩展名"
-    echo "  $0 -f Makefile -s ../projects"
+    echo "  # 查找所有 'main.c'，并添加 '.txt' 后缀，生成 '.../main-k230-apps.c.txt'"
+    echo "  $0 -f main.c -o ./output -e txt"
 }
 
 # --- 参数解析 ---
@@ -105,19 +105,34 @@ echo "-------------------------------------"
     cd "$SOURCE_DIR_ABS"
 
     echo "开始查找并复制文件..."
+    # 注意 find 的 TARGET_FILE 参数需要用引号包裹，以支持通配符
     find . -type f -name "$TARGET_FILE" -print0 | while IFS= read -r -d '' filepath; do
         rel_dir=$(dirname "$filepath")
 
-        name_part="" # 初始化变量是一个好习惯
+        # 智能提取文件名和原始扩展名
+        original_filename=$(basename "$filepath")
+        original_basename="${original_filename%.*}"
+        
+        original_extension=""
+        # 检查文件是否包含扩展名
+        if [[ "$original_filename" == *.* ]]; then
+            original_extension=".${original_filename##*.}"
+        fi
+        
+        # === 核心改动：将 -e 提供的扩展名追加到原始扩展名后面 ===
+        final_extension="${original_extension}${EXTENSION}"
+        # =======================================================
+
+        name_part=""
         if [ "$rel_dir" == "." ]; then
             name_part="$BASE_NAME"
         else
             sub_path=$(echo "$rel_dir" | sed "s|^\./||")
             name_part="$BASE_NAME-$(echo "$sub_path" | tr '/' '-')"
-         fi
+        fi
 
-        # 基于原始文件名构建新的文件名
-        dest_filename="${TARGET_FILE}-${name_part}${EXTENSION}"
+        # 使用新的命名规则构建文件名
+        dest_filename="${original_basename}-${name_part}${final_extension}"
         dest_filepath="${TARGET_DIR_ABS}/${dest_filename}"
 
         cp "$filepath" "$dest_filepath"
@@ -127,3 +142,4 @@ echo "-------------------------------------"
 
 echo "-------------------------------------"
 echo "操作完成！"
+
